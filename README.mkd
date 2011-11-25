@@ -1,0 +1,111 @@
+# local caching server for git
+
+This is a very simple caching server to mitigate bandwidth issues when you
+have many users on a local network and they all need to clone/fetch the same
+set of large remote repos over a (slow) WAN link.  The more such users you
+have, the more bandwidth this saves.
+
+Both authenticated (ssh://) and unauthenticated (git://) modes are available,
+but pushes are NOT supported.
+
+By default, every local fetch triggers an upstream fetch.  If you'd rather do
+that from cron instead, you can set **lazy** mode; see below.
+
+## instructions common to both modes
+
+  * create a userid (say 'gp' on 'gp-server') for this.
+
+  * copy all the scripts to that user's `$HOME/bin` directory.
+
+  * for each repo to be cached, run a clone command, like this:
+
+        $HOME/bin/gitpod clone git://github.com/sitaramc/gitolite gitolite
+
+## instructions for authenticated mode
+
+  * set the 'gitpod' program as the 'gp' user's login shell, using the full
+    path (like `/home/gp/bin/gitpod`).  The command to do this is 'chsh' on
+    Fedora.  Your OS/distro may vary.
+
+    **Note**: After this, you must run something like `su - gp -s /bin/bash`
+    from root if you need a shell.
+
+  * provide access to this id to your users (it's upto you whether you ask
+    people for pubkeys or just give everyone the password).
+
+### extra commands available to authenticated mode
+
+Authenticated users can run the following commands:
+
+  * clone a new repo:
+
+        ssh gp@gp-server clone URL reponame
+
+  * force an upstream fetch (useful if you've set lazy mode and can't wait for
+    the next cron run):
+
+        ssh gp@gp-server fetch reponame
+
+## instructions for unauthenticated mode
+
+  * run git-daemon like the example below.
+
+        $HOME/bin/git-daemon --verbose --export-all --reuseaddr --base-path=$HOME
+
+    This is the only git-daemon variant I have tested; I have no idea if other
+    modes will work, especially inetd mode.  YMMV.  If you make it work, send
+    me a patch for this document.
+
+## lazy mode
+
+If you don't like the default behaviour of checking upstream on every local
+fetch, create/edit a file called `~/.gitpod.rc` and add this line to it:
+
+    LAZY = all
+
+You can then setup cron jobs to fetch repos at whatever interval/time you
+want.  The command you need to put in cron is
+
+    $HOME/bin/gitpod fetch reponame
+
+The shell script called `lazy` can be customised and made as complex as you
+want, to cater to different "freshness" needs for different repos.
+
+## implementation and alternatives
+
+Most of this code, and especially all the shenanigans with `GIT_EXEC_PATH` and
+so on, would not be needed if:
+
+  * git-shell had some way to disable pushes
+  * git allowed you to supply a 'pre-upload' hook
+
+Even now, if git-daemon is sufficient for your needs, *and* you are ok with
+cron-based updates, you don't really need this software.  Just clone using
+'--mirror', and use a shell script called from cron to update all the repos
+every night.
+
+Personally, I don't like unauthenticated protocols like git-daemon.  Plus
+git-daemon is only "one per machine", not "one per user".
+
+### why can't this feature be rolled into gitolite?
+
+Gitolite can already do this, but gitolite will usually host much more
+"company critical" data, so having a separate server for caching allows you to
+relax the rules for it (firewall, connectivity, who can access, etc.).
+
+But if you want to do it in gitolite, here's how:
+
+  * clone the repos manually (don't forget the '--mirror')
+  * *then* add them to the config file.  Give people read-only permissions
+  * add a 'gl-pre-git' hook that runs a 'git fetch' if 'git config --get
+    remote.origin.mirror' exists.  You can also use the 'lazy' script here if
+    you wish
+
+## the name
+
+The word 'cache' is already reserved in git.  'proxy' is a bit better but not
+much (see 'man git-config').
+
+I wanted something short and simple that connotes 'squid'.  'pod' is short for
+'cephalopod'.  You can also think of pod in the normal meaning -- something
+containing several seeds.

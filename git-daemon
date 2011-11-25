@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# save old path and export; we need to restore it in our git-upload-pack
+# because using git-exec-path prepends it to $PATH (ouch!)
+export OLD_PATH=$PATH
+
+# we need this to make git-daemon invoke *our* git-upload-pack
+export GIT_EXEC_PATH=$HOME/bin
+
+# yet we want daemon to run from the original exec-path
+exec $(unset GIT_EXEC_PATH; git --exec-path)/git-daemon "$@"
+

@@ -1,0 +1,255 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+# git tree generator
+
+# input could be args or stdin
+
+# tokens are cmd.data, cmd(data), "string", !"string", or just a plain word.
+# If cmd is not "sh", "git " is prefixed.
+
+# ----
+
+our $cmd;   # command to run
+our $std12; # stdout + stderr of child
+our $rc;    # rc of child
+our $tick;  # like test_tick in git.git's testing env
+test_tick();
+our $linecount = 0;
+
+sub dbg {
+    return unless $ENV{D};
+    my $level = shift;
+    return unless $ENV{D} >= $level;
+    my $all = join("\n", @_);
+    chomp($all);
+    $all =~ s/\n/\n\t/g;
+    print STDERR "line $linecount: $all\n";
+}
+sub ddump {
+    use Data::Dumper;
+    print STDERR "DDUMP: " . Dumper(@_);
+}
+
+my @in;
+if (@ARGV) {
+    @in = @ARGV;
+    @ARGV = ();
+} else {
+    usage() if -t;
+    @in = <>;
+}
+
+for (@in) {
+    $linecount++;
+    chomp;
+    s/^\s+//;
+    print STDERR "$_\n" if /^## /;
+    next if /^#/;
+
+    my @cmds = split /;/;
+    @cmds = grep { s/^\s+//; s/\s+$//; /./; } @cmds;
+    for my $cmd (@cmds) {
+        print STDERR "rc: $rc from cmd prior to $cmd\n" if $rc and $cmd ne 'ok' and $cmd ne '!ok';
+        dbg(1, "C: $cmd");
+        if ($cmd =~ /^sh (.*)/) {
+            run($1);
+        } else {
+            doit($cmd);
+        }
+        $rc = 0 if $cmd eq 'ok' or $cmd eq '!ok';
+    }
+}
+if ($rc) {
+    print STDERR "exiting at line $linecount\n";
+    print STDERR "last output was:\n$std12\n" if $ENV{D};
+}
+exit $rc;
+
+sub doit {
+    my $cmd = shift;
+
+    if ( $cmd eq 'tt' ) {
+
+        test_tick();
+
+    } elsif ( $cmd =~ /^cd (\S*)$/ ) {
+
+        chdir($1 || $ENV{HOME});
+
+    } elsif ( $cmd =~ /^D=(\d+)$/ ) {
+
+        $ENV{D} = $1;
+
+    } elsif ( $cmd =~ /^MSG=(.+)$/ ) {
+
+        $ENV{MSG} = $1;
+
+    } elsif ( $cmd eq 'ok' ) {
+
+        fail("expected success, got rc=$rc, from $cmd", $ENV{MSG} || '') if $rc;
+
+    } elsif ( $cmd =~ '!ok' ) {
+
+        fail("expected failure, got rc=$rc, from $cmd", $ENV{MSG} || '') unless $rc;
+
+    } elsif ( $cmd =~ m(^/(.*)/(.*)$) ) {
+
+        expect($1, $2);
+
+    } elsif ( $cmd =~ m(^!/(.*)/(.*)$) ) {
+
+        not_expect($1, $2);
+
+    } elsif ( $cmd =~ /^\S+$/ and not expand($cmd) ) {
+
+        file($cmd);
+
+    } elsif ( $cmd =~ /^(\S+) ?(.*)$/ ) {
+
+        my ($c, $d) = ($1, $2);
+        expand($c) or die "could not find expansion for $c\n";
+        $c = expand($c);
+        $c .= " $d" if $d;
+        run($c);
+
+    } else {
+
+        die "$cmd?\n";
+
+    }
+}
+
+sub run {
+    $cmd = shift;
+
+    dbg(2, "running: $cmd 2>&1");
+    $std12 = `( $cmd ) 2>&1; echo RC=\$?`;
+    dbg(3, "results:\n$std12");
+
+    if ($std12 =~ /RC=(\d+)$/) {
+        $rc = $1;
+        $std12 =~ s/RC=\d+$//;
+    } else {
+        die "couldnt find RC= in result; this should not happen:\n$std12\n\n...\n";
+    }
+}
+
+sub msg {
+    my $st = shift;
+    my $w1 = shift;
+    print STDERR "$st: $w1\n";
+    return unless @_;
+    map { print STDERR "\t$_\n" } @_;
+    print STDERR "----\n";
+}
+
+sub fail {
+    msg('FAIL', @_);
+    print STDERR "exiting at line $linecount\n";
+    print STDERR "last output was:\n$std12\n" if $ENV{D};
+    exit ( $rc || 74 );
+}
+
+sub pass {
+    msg('pass', @_);
+}
+
+sub sm {
+    # smart match?  for now we just do regex match
+    my $str = shift;
+
+    return ( $std12 =~ qr($str) ? $& : "" );
+}
+
+sub expect {
+    my ($str, $msg) = @_;
+    $msg =~ s/^\s+// if $msg;
+    my $sm;
+    if ($sm = sm($str)) {
+        dbg(3, "M: $sm");
+    } else {
+        fail("in 'expect': $str", $msg || $ENV{MSG} || '');
+    }
+}
+
+sub not_expect {
+    my ($str, $msg) = @_;
+    $msg =~ s/^\s+// if $msg;
+    my $sm;
+    if ($sm = sm($str)) {
+        dbg(3, "M: $sm");
+        fail("in 'not_expect': $str", $msg || $ENV{MSG} || '');
+    }
+}
+
+sub file {
+    my $f = shift;
+    my $ts = localtime($tick);
+    run("echo $f at $ts >> $f && git add $f && git commit -m '$f at $ts'")
+}
+
+sub test_tick {
+    $tick += 60 if $tick;
+    $tick ||= 1310000000;
+    $ENV{GIT_COMMITTER_DATE} = "$tick +0530";
+    $ENV{GIT_AUTHOR_DATE} = "$tick +0530";
+}
+
+sub usage {
+    print <DATA>;
+    expand('help');
+    exit 1;
+}
+
+sub expand {
+    my @basic_commands = qw( add branch clone checkout commit fetch init push reset tag );
+    my %basic_commands = map { $_ => 1 } @basic_commands;
+
+    my %extended_commands = (
+        'commit-empty'  =>  'git commit --allow-empty -m empty',
+        'push-om'       =>  'git push origin master',
+        'reset-h'       =>  'git reset --hard',
+        'reset-hu'      =>  'git reset --hard @{u}',
+        git             =>  'git',
+    );
+
+    my $in = shift;
+    if ($in eq 'help') {
+        print "basic commands:\n", "    ", join(", ", sort keys %basic_commands), "\n\n";
+        print "extended commands:\n",
+            map { "    $_" . (" " x (16 - length($_))) . "$extended_commands{$_}\n" }
+                sort keys %extended_commands;
+        return;
+    }
+    my $out = '';
+    $out ||= "git $in" if ( $basic_commands{$in} || 0 ) == 1;
+    $out ||= $extended_commands{$in} if exists $extended_commands{$in};
+    return $out;
+}
+
+__DATA__
+
+Runs a sequence of git commands supplied as arguments or stdin.  One command
+on each line, or separate them with semicolons if on the same line.
+
+Builtin commands:
+
+    sh some shell command
+                    # will not persist, so env vars, pwd, etc., can't be changed
+    cd path         # this one actually does a chdir
+    tt              # test_tick
+    D=N             # set debug level to N
+    MSG=text        # set error message for next failures
+    ok              # fail if previous rc != 0
+    !ok             # fail if previous rc == 0
+    /patt/ [msg]    # fail if previous out/err does not match patt (msg is optional)
+    !/patt/ [msg]   # fail if previous out/err does     match patt (msg is optional)
+
+    word            # for any other word, create a file called 'word', add, commit
+
+Abbreviations are available, list follows.
+
+----
+

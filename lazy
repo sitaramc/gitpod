@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# exit 0 ==> success ==> be lazy ==> don't fetch upstream right away
+# exit 1 ==> failure ==> don't be lazy ==> fetch upstream right away
+# NOTE: exit 1 is required for gitpod's default behaviour
+
+# gitpod default is not to be lazy
+
+rc=$HOME/.gitpod.rc
+
+# no rc file
+[ -f $rc ] || exit 1
+
+# rc file has 'lazy = all'?
+expand < $rc | grep -i "^ *lazy *= *all *$" &>/dev/null && exit 0
+
+exit 1
+
+# ----------------------------------------------------------------------
+
+# you can remove the 'exit 1' above and add more functionality.  For instance,
+# gitpod supplies the reponame (without the trailing '.git') as an argument to
+# this script.  You can make use of it somehow.
+
+# patches welcome.  Please keep things backward compat.
+
+# rc file has 'lazy = repo'
+repo="$1"
+    # NOTE: this comes in WITHOUT the '.git' at the end.  The rc file is
+    # expected to have reponames the same way.
+
+# now do stuff with $rc and $repo and decide...

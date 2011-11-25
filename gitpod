@@ -1,0 +1,82 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+# can something be quick and dirty, but also secure?
+
+# this covers all types of invocations
+    shift if ($ARGV[0] || '') eq '-c';
+    my $cmd = '';
+    $cmd ||= $ENV{SSH_ORIGINAL_COMMAND};
+    $cmd ||= ( join (" ", @ARGV) );
+
+# no buffering
+    select(STDERR); $|++; select(STDOUT); $|++;
+
+# safety first
+    die "need a command\n" unless $cmd;
+    die "invalid character $1 in $cmd\n" if $cmd =~ m(([^-+=:'""'./@ \w]));
+    die "I don't like .. in $cmd\n" if $cmd =~ /\.\./;
+    die "I don't like leading / in $cmd\n" if $cmd =~ m((^|\s)/);
+
+# 5 basic commands
+    if ($cmd eq 'info') {
+        list_repos();
+    } elsif ($cmd =~ /^clone (\S+) (\S+)$/) {
+        clone($1, $2);
+    } elsif ($cmd =~ /^lazy-fetch (\S+)$/) {
+        fetch($1) unless lazy($1);
+    } elsif ($cmd =~ /^fetch (\S+)$/) {
+        fetch($1);
+    } elsif ($cmd =~ /^git-upload-pack (.+)$/) {
+        upload($1);
+    } else {
+        die "unknown command $cmd\n";
+    }
+
+# ----------------------------------------------------------------------
+
+sub list_repos {
+    print "hello, this is gitpod\n\n";
+    system("find . -type d -name '?*.git' | cut -c3- | sed -e 's/\\.git\$//' | sort");
+}
+
+sub lazy {
+    my $repo = shift;
+    $repo =~ s/\.git$//;
+
+    # call the external script 'lazy'.  If it succeeds we return true.  Note
+    # that shell and perl have opposite meanings for 0/non-0.
+    system("$ENV{HOME}/bin/lazy '$repo'") or return 1;
+    return 0;
+}
+
+sub fetch {
+    my $repo = shift;
+    $repo =~ s/\.git$//;
+
+    -d "$ENV{HOME}/$repo.git" or die "invalid repo $repo\n";
+    print STDERR "fetching from " . `git config --file $ENV{HOME}/$repo.git/config --get remote.origin.url`;
+    system("cd $ENV{HOME}/$repo.git; git fetch --progress") and die "FATAL: git fetch failed; check messages above\n";
+}
+
+sub upload {
+    my $repo = shift;
+    $repo =~ s/(^')|('$)//g;
+
+    fetch($repo) unless lazy($repo);
+
+    exec("git", "shell", "-c", "git-upload-pack '$repo'");
+        # XXX this is weird.  gl-auth-command does not require those single
+        # quotes but this one does.  Without them, you get "fatal: bad
+        # argument" followed by "...remote hung up..."
+}
+
+sub clone {
+    my ($remote, $local) = @_;
+    $local =~ s/\.git$//;
+
+    my $cmd="git clone --progress --mirror $remote $local.git";
+    print STDERR "running: $cmd\n";
+    system($cmd) and die "FATAL: git clone failed; check messages above\n";
+}

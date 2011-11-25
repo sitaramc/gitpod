@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# we can only get called by git-daemon by setting git-exec-path to our path.
+# But this prepends it to $PATH, so we have to undo both these things before
+# we can call any normal git stuff
+PATH=$OLD_PATH
+unset GIT_EXEC_PATH
+
+repo=${PWD##$HOME/}
+$HOME/bin/gitpod lazy-fetch $repo >&2
+
+exec git-upload-pack "$@"
