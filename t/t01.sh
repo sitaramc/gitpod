@@ -42,13 +42,13 @@
         git clone $rr/$r non-bare &>/dev/null
         cd non-bare
 
-        printf "
+        git-test "
             $r; m1; m2; branch AA; m3; m4
             checkout AA; a1; a2
             push --all origin
             /new.branch.*AA.*AA/
             /new.branch.*master.*master/
-        " | git test
+        "
     done
 
     cd $HOME
@@ -62,8 +62,8 @@
     ssh $USER@localhost clone file:///$rr/r3 r3 &>/dev/null
     ssh $USER@localhost clone file:///$rr/r4 sub4/r4 &>/dev/null
 
-# check the repos
-    printf "
+    git-test "
+    ## check the repos
         git ls-remote r1.git
         /3ba846a/; /fc7a819/
         git ls-remote sub2/r2.git
@@ -73,46 +73,47 @@
         /b499b19/; /e4cc88d/
         git ls-remote sub4/r4.git
         /af0f123/; /cd3734f/
-    " | git test
 
-    printf "
         sh ssh $USER@localhost info
         /r1/
         /r3/
         /sub2/r2/
         /sub4/r4/
-    " | git test
 
-# empty fetch
-    git test "sh ssh $USER@localhost fetch r1; /fetching from/; !/From file/"
+    ## empty fetch
+        sh ssh $USER@localhost fetch r1; /fetching from/; !/From file/
 
-# cause a non-empty fetch
-    git test "cd r1.git; branch -D AA; /Deleted branch AA/; git gc --prune=now"
-    git test "sh ssh $USER@localhost fetch r1; /fetching from/; /From file/"
+    ## macro
+    # define a macro for a frequently used sequence of steps
+        DEF delete-AA = cd $HOME/r1.git; branch -D AA; /Deleted branch AA/; git gc --prune=now; cd $HOME
 
-# do a userclone
-    mkdir u
-    git test "MSG=user clone; git clone $USER@localhost:r1 u/r1; cd u/r1; git ls-remote origin; ok; /3ba846a/; /fc7a819/ "
+    ## non-empty fetch
+        delete-AA; sh ssh $USER@localhost fetch r1; /fetching from/; /From file/
 
-# test automatic fetch
-    git test "cd r1.git; branch -D AA; /Deleted branch AA/; git gc --prune=now"
-    git test "cd u/r1; git fetch; /new.branch.*AA.*AA/ autofetch 1"
+    ## userclone
+        sh mkdir u
+        git clone $USER@localhost:r1 u/r1; cd u/r1; git ls-remote origin; ok; /3ba846a/; /fc7a819/
 
-# now it shouldn't
-    git test "cd u/r1; git fetch; !/new.branch.*AA.*AA/ autofetch 2"
+    ## automatic fetch
+    # it should fetch one automatically here
+        delete-AA; cd $HOME/u/r1; git fetch; /new.branch.*AA.*AA/
 
-# test lazy mode
-    echo LAZY = all > $HOME/.gitpod.rc
+    # and here it shouldn't
+        cd u/r1; git fetch; !/new.branch.*AA.*AA/
 
-# test automatic fetch fail due to lazy mode
-    git test "cd r1.git; branch -D AA; /Deleted branch AA/; git gc --prune=now"
-    git test "cd u/r1; git fetch; !/new.branch.*AA.*AA/ autofetch 3"
+    ## lazy mode
+        sh echo LAZY = all > $HOME/.gitpod.rc
 
-# manual fetch via ssh
-    git test "sh ssh $USER@localhost fetch r1; /new.branch.*AA.*AA/ manual fetch via ssh"
+    # automatic fetch should fail due to lazy mode
+        delete-AA; cd $HOME/u/r1; git fetch; !/new.branch.*AA.*AA/
 
-# manual fetch from local shell
-    git test "cd r1.git; branch -D AA; /Deleted branch AA/; git gc --prune=now"
-    git test "sh gitpod fetch r1; /new.branch.*AA.*AA/ manual fetch local shell"
+    ## manual fetch
+    # via ssh
+        sh ssh $USER@localhost fetch r1; /new.branch.*AA.*AA/
+
+    # from local shell
+        delete-AA; sh gitpod fetch r1; /new.branch.*AA.*AA/
+
+    " || die TEST FAILED
 
 echo DONE
