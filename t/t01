@@ -1,0 +1,122 @@
+#!/usr/bin/perl
+use 5.10.0;
+use strict;
+use warnings;
+
+# number of tests
+BEGIN {
+    my $ntests = 31;     # change this when #tests changes
+    unshift @ARGV, $ntests if ($ENV{HARNESS_ACTIVE} || 0) >= 1;
+}
+
+use lib "$ENV{HOME}/bin";
+use Tsh;
+
+# settings/defines
+    my $rr="$HOME/gitpod-remote-repos";
+
+# check git-test and gitpod are in $PATH
+    try "
+        which tsh;      ok or tsh    not in PATH
+        which gitpod;   ok or gitpod not in PATH
+    " or die;
+
+# check login shell is also the same
+    run('which gitpod') eq run('grep ^$USER: /etc/passwd | cut -f7 -d:')
+        or die "login shell is not the right one";
+
+# clean slate
+    cd; rm("-rf $rr non-bare r[1234].git sub[1234] u .gitpod.rc");
+
+# check ssh setup
+    try "
+        ssh -o preferredauthentications=publickey $USER\@localhost info
+        /hello, this is gitpod/ or ssh setup is not complete
+    " or die;
+
+# prepare to create the "remote" repositories
+    try "mkdir -p $rr/r{1,2,3,4}"
+        or die "mkdir $rr/... failed\n";
+
+    unless (try("git config --get user.name")) {
+        say '...creating git configs...';
+        run "git config --global user.name 'git cephalopod'
+            git config --global user.email 'git-cephalopod\@example.com'";
+    }
+
+# make 4 "remote" repositories
+    for my $r (qw(r1 r2 r3 r4)) {
+        try "
+        # create bare repo and clone it
+            cd $rr/$r; git init --bare
+            cd; rm -rf non-bare; git clone $rr/$r non-bare
+        # make commits, a branch, etc., and push
+            cd non-bare; dc $r; dc m1; dc m2; branch AA; dc m3; dc m4; checkout AA; dc a1; dc a2
+            push --all origin
+        # check branches got pushed ok
+            /new.branch.*AA.*AA/ push branch AA failed
+            /new.branch.*master.*master/ push branch master failed
+        " or die;
+    }
+
+# just for kicks, 2 of the repos will be in subdirectories
+    try ' cd; mkdir sub2 sub4 ' or die 'mkdir sub2 sub4 failed';
+
+# clones:
+    try "
+        ## 'clone' the first 2 repos using local commands
+        gitpod clone file:///$rr/r1 r1
+        gitpod clone file:///$rr/r2 sub2/r2
+
+        ## now setup the other 2 using ssh
+        ssh $USER\@localhost clone file:///$rr/r3 r3
+        ssh $USER\@localhost clone file:///$rr/r4 sub4/r4
+    " or die error_list();
+
+    try "
+    ## check the repos
+        git ls-remote r1.git;       /3ba846a/; /fc7a819/
+        git ls-remote sub2/r2.git;  /c4c7d55/; /50d9881/
+
+        git ls-remote r3.git;       /b499b19/; /e4cc88d/
+        git ls-remote sub4/r4.git;  /af0f123/; /cd3734f/
+
+        ssh $USER\@localhost info
+        /r1/;   /r3/;   /sub2/r2/;  /sub4/r4/
+
+    ## empty fetch
+        ssh $USER\@localhost fetch r1; /fetching from/; !/From file/
+
+    ## macro
+    # define a macro for a frequently used sequence of steps
+        DEF delete-AA = cd $HOME/r1.git; branch -D AA; /Deleted branch AA/; git gc --prune=now; cd $HOME
+
+    ## non-empty fetch
+        delete-AA; ssh $USER\@localhost fetch r1; /fetching from/; /From file/
+
+    ## userclone
+        mkdir u
+        git clone $USER\@localhost:r1 u/r1; cd u/r1; git ls-remote origin; ok; /3ba846a/; /fc7a819/
+
+    ## automatic fetch
+    # it should fetch one automatically here
+        delete-AA; cd $HOME/u/r1; git fetch; /new.branch.*AA.*AA/
+
+    # and here it shouldn't
+        git fetch; !/new.branch.*AA.*AA/
+
+    ## lazy mode
+    ENV TSH_VERBOSE=0
+        echo LAZY = all > $HOME/.gitpod.rc
+
+    # automatic fetch should fail due to lazy mode
+        delete-AA; cd $HOME/u/r1; git fetch; !/new.branch.*AA.*AA/
+
+    ## manual fetch
+    # via ssh
+        ssh $USER\@localhost fetch r1; /new.branch.*AA.*AA/
+
+    # from local shell
+        delete-AA; gitpod fetch r1; /new.branch.*AA.*AA/
+
+    " or die scalar(error_list());
