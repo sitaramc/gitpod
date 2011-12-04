@@ -3,14 +3,11 @@ use 5.10.0;
 use strict;
 use warnings;
 
-# number of tests
-BEGIN {
-    my $ntests = 31;     # change this when #tests changes
-    unshift @ARGV, $ntests if ($ENV{HARNESS_ACTIVE} || 0) >= 1;
-}
-
 use lib "$ENV{HOME}/bin";
 use Tsh;
+
+# plan -- change this when #tests changes
+    run 'plan 31';
 
 # settings/defines
     my $rr="$HOME/gitpod-remote-repos";
