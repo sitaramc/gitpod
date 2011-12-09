@@ -7,7 +7,7 @@ use lib "$ENV{HOME}/bin";
 use Tsh;
 
 # plan -- change this when #tests changes
-    run 'plan 31';
+    run 'plan 39';
 
 # settings/defines
     my $rr="$HOME/gitpod-remote-repos";
@@ -51,8 +51,8 @@ use Tsh;
             cd non-bare; dc $r; dc m1; dc m2; branch AA; dc m3; dc m4; checkout AA; dc a1; dc a2
             push --all origin
         # check branches got pushed ok
-            /new.branch.*AA.*AA/ push branch AA failed
-            /new.branch.*master.*master/ push branch master failed
+            /new.branch.*AA.*AA/ or push branch AA failed
+            /new.branch.*master.*master/ or push branch master failed
         " or die;
     }
 
