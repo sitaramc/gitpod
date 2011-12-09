@@ -12,7 +12,7 @@ use Tsh;
 # settings/defines
     my $rr="$HOME/gitpod-remote-repos";
 
-# check git-test and gitpod are in $PATH
+# check tsh and gitpod are in $PATH
     try "
         which tsh;      ok or tsh    not in PATH
         which gitpod;   ok or gitpod not in PATH

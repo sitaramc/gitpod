@@ -5,34 +5,34 @@ use warnings;
 # can something be quick and dirty, but also secure?
 
 # this covers all types of invocations
-    shift if ($ARGV[0] || '') eq '-c';
-    my $cmd = '';
-    $cmd ||= $ENV{SSH_ORIGINAL_COMMAND};
-    $cmd ||= ( join (" ", @ARGV) );
+shift if ( $ARGV[0] || '' ) eq '-c';
+my $cmd = '';
+$cmd ||= $ENV{SSH_ORIGINAL_COMMAND};
+$cmd ||= ( join( " ", @ARGV ) );
 
 # no buffering
-    select(STDERR); $|++; select(STDOUT); $|++;
+select(STDERR); $|++; select(STDOUT); $|++;
 
 # safety first
-    die "need a command\n" unless $cmd;
-    die "invalid character $1 in $cmd\n" if $cmd =~ m(([^-+=:'""'./@ \w]));
-    die "I don't like .. in $cmd\n" if $cmd =~ /\.\./;
-    die "I don't like leading / in $cmd\n" if $cmd =~ m((^|\s)/);
+die "need a command\n" unless $cmd;
+die "invalid character $1 in $cmd\n"   if $cmd =~ m(([^-+=:'""'./@ \w]));
+die "I don't like .. in $cmd\n"        if $cmd =~ /\.\./;
+die "I don't like leading / in $cmd\n" if $cmd =~ m((^|\s)/);
 
 # 5 basic commands
-    if ($cmd eq 'info') {
-        list_repos();
-    } elsif ($cmd =~ /^clone (\S+) (\S+)$/) {
-        clone($1, $2);
-    } elsif ($cmd =~ /^lazy-fetch (\S+)$/) {
-        fetch($1) unless lazy($1);
-    } elsif ($cmd =~ /^fetch (\S+)$/) {
-        fetch($1);
-    } elsif ($cmd =~ /^git-upload-pack (.+)$/) {
-        upload($1);
-    } else {
-        die "unknown command $cmd\n";
-    }
+if ( $cmd eq 'info' ) {
+    list_repos();
+} elsif ( $cmd =~ /^clone (\S+) (\S+)$/ ) {
+    clone( $1, $2 );
+} elsif ( $cmd =~ /^lazy-fetch (\S+)$/ ) {
+    fetch($1) unless lazy($1);
+} elsif ( $cmd =~ /^fetch (\S+)$/ ) {
+    fetch($1);
+} elsif ( $cmd =~ /^git-upload-pack (.+)$/ ) {
+    upload($1);
+} else {
+    die "unknown command $cmd\n";
+}
 
 # ----------------------------------------------------------------------
 
@@ -66,17 +66,17 @@ sub upload {
 
     fetch($repo) unless lazy($repo);
 
-    exec("git", "shell", "-c", "git-upload-pack '$repo'");
-        # XXX this is weird.  gl-auth-command does not require those single
-        # quotes but this one does.  Without them, you get "fatal: bad
-        # argument" followed by "...remote hung up..."
+    exec( "git", "shell", "-c", "git-upload-pack '$repo'" );
+    # XXX this is weird.  gl-auth-command does not require those single
+    # quotes but this one does.  Without them, you get "fatal: bad
+    # argument" followed by "...remote hung up..."
 }
 
 sub clone {
-    my ($remote, $local) = @_;
+    my ( $remote, $local ) = @_;
     $local =~ s/\.git$//;
 
-    my $cmd="git clone --progress --mirror $remote $local.git";
+    my $cmd = "git clone --progress --mirror $remote $local.git";
     print STDERR "running: $cmd\n";
     system($cmd) and die "FATAL: git clone failed; check messages above\n";
 }
