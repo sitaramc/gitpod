@@ -48,7 +48,7 @@ use Tsh;
             cd $rr/$r; git init --bare
             cd; rm -rf non-bare; git clone $rr/$r non-bare
         # make commits, a branch, etc., and push
-            cd non-bare; dc $r; dc m1; dc m2; branch AA; dc m3; dc m4; checkout AA; dc a1; dc a2
+            cd non-bare; tc $r; tc m1; tc m2; branch AA; tc m3; tc m4; checkout AA; tc a1; tc a2
             push --all origin
         # check branches got pushed ok
             /new.branch.*AA.*AA/ or push branch AA failed
