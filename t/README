@@ -1,0 +1,37 @@
+# README for running gitpod tests
+
+  * create a user (we'll use 'sam')
+
+  * as yourself, clone gitpod and tsh to /tmp
+
+        cd <where all your clones are>
+
+        rm -rf /tmp/gitpod.git /tmp/tsh.git
+
+        git clone --bare gitpod /tmp/gitpod.git
+        git clone --bare tsh    /tmp/tsh.git
+
+  * log on to the gitpod user
+
+        su - sam -s /bin/bash
+
+  * pull everything together
+
+        rm -rf bin gitpod tsh; mkdir bin
+
+        git clone /tmp/gitpod.git
+        git clone /tmp/tsh.git
+
+        cp gitpod/git* gitpod/lazy tsh/tsh tsh/Tsh.pm bin
+
+        # check to make sure; they should all be in ~/bin
+        which gitpod lazy tsh git-daemon
+
+  * as root, set the user's shell to $HOME/bin/gitpod
+
+        chsh -s /home/sam/bin/gitpod sam
+        # ignore the warning about /etc/shells.  this is on fedora.  YDMV
+
+  * again as 'sam', run the test
+
+        gitpod/t/t01
