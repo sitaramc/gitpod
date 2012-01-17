@@ -7,7 +7,7 @@ use lib "$ENV{HOME}/bin";
 use Tsh;
 
 # plan -- change this when #tests changes
-    run 'plan 39';
+    try 'plan 39';
 
 # settings/defines
     my $rr="$HOME/gitpod-remote-repos";
@@ -37,8 +37,7 @@ use Tsh;
 
     unless (try("git config --get user.name")) {
         say '...creating git configs...';
-        run "git config --global user.name 'git cephalopod'
-            git config --global user.email 'git-cephalopod\@example.com'";
+        run "git config --global user.name 'git cephalopod'; git config --global user.email 'git-cephalopod\@example.com'";
     }
 
 # make 4 "remote" repositories
