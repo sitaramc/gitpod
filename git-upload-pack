@@ -6,7 +6,7 @@
 PATH=$OLD_PATH
 unset GIT_EXEC_PATH
 
-repo=${PWD##$HOME/}
-$HOME/bin/gitpod lazy-fetch $repo >&2
+repo="${PWD##$HOME/}"
+"$HOME/bin/gitpod" lazy-fetch $repo >&2
 
 exec git-upload-pack "$@"

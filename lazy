@@ -6,10 +6,10 @@
 
 # gitpod default is not to be lazy
 
-rc=$HOME/.gitpod.rc
+rc="$HOME/.gitpod.rc"
 
 # no rc file
-[ -f $rc ] || exit 1
+[ -f "$rc" ] || exit 1
 
 # rc file has 'lazy = all'?
 expand < $rc | grep -i "^ *lazy *= *all *$" &>/dev/null && exit 0

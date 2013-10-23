@@ -47,7 +47,7 @@ sub lazy {
 
     # call the external script 'lazy'.  If it succeeds we return true.  Note
     # that shell and perl have opposite meanings for 0/non-0.
-    system("$ENV{HOME}/bin/lazy '$repo'") or return 1;
+    system("'$ENV{HOME}/bin/lazy' '$repo'") or return 1;
     return 0;
 }
 
@@ -56,8 +56,8 @@ sub fetch {
     $repo =~ s/\.git$//;
 
     -d "$ENV{HOME}/$repo.git" or die "invalid repo $repo\n";
-    print STDERR "fetching from " . `git config --file $ENV{HOME}/$repo.git/config --get remote.origin.url`;
-    system("cd $ENV{HOME}/$repo.git; git fetch --progress") and die "FATAL: git fetch failed; check messages above\n";
+    print STDERR "fetching from " . `git config --file "$ENV{HOME}/$repo.git/config" --get remote.origin.url`;
+    system("cd '$ENV{HOME}/$repo.git'; git fetch --progress") and die "FATAL: git fetch failed; check messages above\n";
 }
 
 sub upload {
