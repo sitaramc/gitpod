@@ -37,8 +37,16 @@ if ( $cmd eq 'info' ) {
 # ----------------------------------------------------------------------
 
 sub list_repos {
-    print "hello, this is gitpod\n\n";
+    print "## hello, this is gitpod\n\n";
     system("find . -type d -name '?*.git' | cut -c3- | sed -e 's/\\.git\$//' | sort");
+
+	my @repos = `find . -type d -name '?*.git' | cut -c3- | sed -e 's/\\.git\$//' | sort`;
+	chomp(@repos);
+
+	foreach my $repo (@repos) {
+		my $remote = `cd "$repo.git"; git remote -v | grep '^origin' | grep '(fetch)' | awk '{print \$2;}'`;
+		print "$repo $remote";
+	}
 }
 
 sub lazy {
