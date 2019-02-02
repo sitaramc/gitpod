@@ -1,111 +1,74 @@
-# local caching server for git
+# complete rewrite (Feb 2019)
 
-This is a very simple caching server to mitigate bandwidth issues when you
-have many users on a local network and they all need to clone/fetch the same
-set of large remote repos over a (slow) WAN link.  The more such users you
-have, the more bandwidth this saves.
+This is a complete rewrite of the code, to accommodate the fact that the old
+code no longer works under git v2.18 and above, due to fundamental changes in
+how git runs upload-pack.  Basically, I am unable to fool it into executing
+gitpod's wrapper instead of the real "git-upload-pack", something that is
+required for the old version to do its thing.  Luckily, I realised that
+git-daemon has (and apparently always had!), an "access hook" option, which
+gives us an "in".
 
-Both authenticated (ssh://) and unauthenticated (git://) modes are available,
-but pushes are NOT supported.
+# hardcoded stuff (customisation TBD!) and other backward incompatibilities
 
-By default, every local fetch triggers an upstream fetch.  If you'd rather do
-that from cron instead, you can set **lazy** mode; see below.
+The script currently has some hardcodings; please let me know if you need any
+of them made more flexible/customisable
 
-## instructions common to both modes
+-   hardcoded to github.com
+-   hardcoded "lazy" duration (just under 2.5 hours)
 
-  * create a userid (say 'gp' on 'gp-server') for this.
+Also, there is also no support for ssh mode now; if authenticated access to
+cached repos is needed, it's best done using gitolite, and enabling the
+"upstream" trigger.
 
-  * copy all the scripts to that user's `$HOME/bin` directory.
+# install and use
 
-  * for each repo to be cached, run a clone command, like this:
+-   best to create a special userid only for this
 
-        $HOME/bin/gitpod clone git://github.com/sitaramc/gitolite gitolite
+-   put this program in ~/bin in that userid
 
-## instructions for authenticated mode
+-   run this command
 
-  * set the 'gitpod' program as the 'gp' user's login shell, using the full
-    path (like `/home/gp/bin/gitpod`).  The command to do this is 'chsh' on
-    Fedora.  Your OS/distro may vary.
+        git daemon                              \
+            --access-hook=$HOME/bin/gitpod      \
+            --informative-errors                \
+            --max-connections=1                 \
+            --base-path=$HOME                   \
+            --export-all                        \
+            --reuseaddr                         \
+            --verbose                           \
+            --detach
 
-    **Note**: After this, you must run something like `su - gp -s /bin/bash`
-    from root if you need a shell.
+    The "max-connections" is optional; I am running this on a very low-RAM
+    box, so it helps me.  (Sadly, git-daemon produces a cryptic "Connection
+    reset by peer" when the limit is exceeded; be sure to inform your users
+    that if they see that message they should try again after some time!)
 
-  * provide access to this id to your users (it's upto you whether you ask
-    people for pubkeys or just give everyone the password).
+-   add repos using this command:
 
-### extra commands available to authenticated mode
+        bin/gitpod add GITHUB_USER/GITHUB_REPO
 
-Authenticated users can run the following commands:
+-   (OPTIONAL) add the "status" repo
 
-  * clone a new repo:
+        cd
+        git init status
+        cd status
+        git commit --allow-empty -m empty
 
-        ssh gp@gp-server clone URL reponame
+# for "users"
 
-  * force an upstream fetch (useful if you've set lazy mode and can't wait for
-    the next cron run):
+Users use this as `git://this.host/GITHUB_USER/GITHUB_REPO` (for example `git
+clone git://127.0.0.1/sitaramc/gitolite`)
 
-        ssh gp@gp-server fetch reponame
+# finding the status
 
-## instructions for unauthenticated mode
+There's a very kludgey method to check what repos have recently been "fetched"
+from github.com: just run an ls-remote on a repo called "status":
 
-  * run git-daemon like the example below.
+    git ls-remote git://this.host.name/status
 
-        $HOME/bin/git-daemon --verbose --export-all --reuseaddr --base-path=$HOME
+A list of tags will show up, each of which is a carefully formatted set of
+date, time, IP address, and repo name.
 
-    This is the only git-daemon variant I have tested; I have no idea if other
-    modes will work, especially inetd mode.  YMMV.  If you make it work, send
-    me a patch for this document.
+Yes, it's a kludge, as I already said, but if you can think of a better way to
+show users *something*, I'd be happy to hear it.
 
-## lazy mode
-
-If you don't like the default behaviour of checking upstream on every local
-fetch, create/edit a file called `~/.gitpod.rc` and add this line to it:
-
-    LAZY = all
-
-You can then setup cron jobs to fetch repos at whatever interval/time you
-want.  The command you need to put in cron is
-
-    $HOME/bin/gitpod fetch reponame
-
-The shell script called `lazy` can be customised and made as complex as you
-want, to cater to different "freshness" needs for different repos.
-
-## implementation and alternatives
-
-Most of this code, and especially all the shenanigans with `GIT_EXEC_PATH` and
-so on, would not be needed if:
-
-  * git-shell had some way to disable pushes
-  * git allowed you to supply a 'pre-upload' hook
-
-Even now, if git-daemon is sufficient for your needs, *and* you are ok with
-cron-based updates, you don't really need this software.  Just clone using
-'--mirror', and use a shell script called from cron to update all the repos
-every night.
-
-Personally, I don't like unauthenticated protocols like git-daemon.  Plus
-git-daemon is only "one per machine", not "one per user".
-
-### why can't this feature be rolled into gitolite?
-
-Gitolite can already do this, but gitolite will usually host much more
-"company critical" data, so having a separate server for caching allows you to
-relax the rules for it (firewall, connectivity, who can access, etc.).
-
-But if you want to do it in gitolite, here's how:
-
-  * clone the repos manually (don't forget the '--mirror')
-  * *then* add them to the config file.  Give people read-only permissions
-  * add a 'gl-pre-git' hook that runs a 'git fetch' if 'git config --get
-    remote.origin.mirror' exists.  You can also use the 'lazy' script here if
-    you wish
-
-## the name
-
-The word 'cache' is already reserved in git.  'proxy' is a bit better but not
-much (see 'man git-config').
-
-I wanted something short and simple that connotes 'squid'.  'pod' is short for
-'cephalopod'.  You can also think of pod in the normal meaning -- something
-containing several seeds.

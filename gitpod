@@ -1,82 +1,60 @@
-#!/usr/bin/perl
-use strict;
-use warnings;
+#!/bin/bash
 
-# can something be quick and dirty, but also secure?
+# See README for documentation
 
-# this covers all types of invocations
-shift if ( $ARGV[0] || '' ) eq '-c';
-my $cmd = '';
-$cmd ||= $ENV{SSH_ORIGINAL_COMMAND};
-$cmd ||= ( join( " ", @ARGV ) );
-
-# no buffering
-select(STDERR); $|++; select(STDOUT); $|++;
-
-# safety first
-die "need a command\n" unless $cmd;
-die "invalid character $1 in $cmd\n"   if $cmd =~ m(([^-+=:'""'./@ \w]));
-die "I don't like .. in $cmd\n"        if $cmd =~ /\.\./;
-die "I don't like leading / in $cmd\n" if $cmd =~ m((^|\s)/);
-
-# 5 basic commands
-if ( $cmd eq 'info' ) {
-    list_repos();
-} elsif ( $cmd =~ /^clone (\S+) (\S+)$/ ) {
-    clone( $1, $2 );
-} elsif ( $cmd =~ /^lazy-fetch (\S+)$/ ) {
-    fetch($1) unless lazy($1);
-} elsif ( $cmd =~ /^fetch (\S+)$/ ) {
-    fetch($1);
-} elsif ( $cmd =~ /^git-upload-pack (.+)$/ ) {
-    upload($1);
-} else {
-    die "unknown command $cmd\n";
-}
+if [ "$1" = "add" ]
+then
+    # we're being run manually from the command line
+    cd
+    git clone --mirror https://github.com/$2 $2.git
+    exit $?
+fi
 
 # ----------------------------------------------------------------------
+# check that we're being called by git-daemon; exit if not.  We have not yet
+# added support for 'git archive', by the way
+[ "$1" = "upload-pack" ] || { echo huh?; exit 1; }
 
-sub list_repos {
-    print "hello, this is gitpod\n\n";
-    system("find . -type d -name '?*.git' | cut -c3- | sed -e 's/\\.git\$//' | sort");
-}
+# get the repo name
+repo=$2	# this is also $PWD, by the way
+# it is a full path; let's trim it a bit for our purposes
+repo=${repo#$HOME/}
+repo=${repo%.git}
 
-sub lazy {
-    my $repo = shift;
-    $repo =~ s/\.git$//;
+# no action needed for status repo
+[ "$repo" = "status/" ] && exit 0
+# about that trailing slash: status is a non-bare repo, so $repo starts out as
+# "$HOME/status/.git", and the two transformations above turn it into "status/"
 
-    # call the external script 'lazy'.  If it succeeds we return true.  Note
-    # that shell and perl have opposite meanings for 0/non-0.
-    system("$ENV{HOME}/bin/lazy '$repo'") or return 1;
-    return 0;
-}
+# code to add a tag to an optional "status" repo
+set_status() (
+    [ -d $HOME/status ] || return
 
-sub fetch {
-    my $repo = shift;
-    $repo =~ s/\.git$//;
+    echo "$*" >> ~/gh.status.log
+    cd $HOME/status
+    unset GIT_DIR
+    git tag "$1"
 
-    -d "$ENV{HOME}/$repo.git" or die "invalid repo $repo\n";
-    print STDERR "fetching from " . `git config --file $ENV{HOME}/$repo.git/config --get remote.origin.url`;
-    system("cd $ENV{HOME}/$repo.git; git fetch --progress") and die "FATAL: git fetch failed; check messages above\n";
-}
+    # housekeeping; delete all but the last 100 "status" lines (i.e., tags).
+    # I've no idea what happens when there are way too many tags, and I don't
+    # care, in this application.  This "100" is another hardcoding, by the way
+    git tag | head -n -100 | while read t
+    do
+        git tag -d "$t"
+        echo $t >> $HOME/deleted.tags
+    done
+)
 
-sub upload {
-    my $repo = shift;
-    $repo =~ s/(^')|('$)//g;
+# too noisy; commented out
+# set_status "`date +%F.%H-%M-%S`-$REMOTE_ADDR-$repo"
 
-    fetch($repo) unless lazy($repo);
+# is it fresh?  We currently hardcode freshness as just under 2.5 hours
+# (specifically, 10% of a day)
+if perl -e 'exit 0 if -M "FETCH_HEAD" > 0.1; exit 1'
+then
+    set_status "`date +%F.%H-%M-%S`-fetching-$repo"
+    git fetch
+    set_status "`date +%F.%H-%M-%S`-fetching-$repo-DONE"
+fi
 
-    exec( "git", "shell", "-c", "git-upload-pack '$repo'" );
-    # XXX this is weird.  gl-auth-command does not require those single
-    # quotes but this one does.  Without them, you get "fatal: bad
-    # argument" followed by "...remote hung up..."
-}
-
-sub clone {
-    my ( $remote, $local ) = @_;
-    $local =~ s/\.git$//;
-
-    my $cmd = "git clone --progress --mirror $remote $local.git";
-    print STDERR "running: $cmd\n";
-    system($cmd) and die "FATAL: git clone failed; check messages above\n";
-}
+exit 0
