@@ -1,11 +1,17 @@
 #!/bin/bash
 
+# git daemon --access-hook=/opt/bin/gitpod --base-path=$HOME/pods  \
+#     --informative-errors --max-connections=2                     \
+#     --export-all --reuseaddr --verbose --detach
+
+POD_HOME="$HOME/pods"
+
 # See README for documentation
 
 if [ "$1" = "add" ]
 then
     # we're being run manually from the command line
-    cd
+    cd $POD_HOME
     git clone --mirror https://github.com/$2 $2.git
     exit $?
 fi
@@ -18,20 +24,20 @@ fi
 # get the repo name
 repo=$2	# this is also $PWD, by the way
 # it is a full path; let's trim it a bit for our purposes
-repo=${repo#$HOME/}
+repo=${repo#$POD_HOME/}
 repo=${repo%.git}
 
 # no action needed for status repo
 [ "$repo" = "status/" ] && exit 0
 # about that trailing slash: status is a non-bare repo, so $repo starts out as
-# "$HOME/status/.git", and the two transformations above turn it into "status/"
+# "$POD_HOME/status/.git", and the two transformations above turn it into "status/"
 
 # code to add a tag to an optional "status" repo
 set_status() (
-    [ -d $HOME/status ] || return
+    [ -d $POD_HOME/status ] || return
 
     echo "$*" >> ~/gh.status.log
-    cd $HOME/status
+    cd $POD_HOME/status
     unset GIT_DIR
     git tag "$1"
 
@@ -41,7 +47,7 @@ set_status() (
     git tag | head -n -100 | while read t
     do
         git tag -d "$t"
-        echo $t >> $HOME/deleted.tags
+        echo $t >> $POD_HOME/deleted.tags
     done
 )
 
