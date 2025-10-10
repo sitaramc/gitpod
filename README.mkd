@@ -1,3 +1,9 @@
+**2025-10-10: this repo is now archived**.  After 4-5 years it will be deleted.
+
+Eventually I intend to keep only gitolite, gitolite-doc, and perhaps a couple of other repos.  Almost everything else I have is essentially background noise :-)
+
+----
+
 # complete rewrite (Feb 2019)
 
 This is a complete rewrite of the code, to accommodate the fact that the old
